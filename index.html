@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="description" content="BTC价格追踪 - iOS应用演示">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC价格追踪 - iOS应用演示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .phone-container {
+            max-width: 375px;
+            margin: 0 auto;
+            background: #f8f9fa;
+            border-radius: 30px;
+            padding: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 0;
+            border-bottom: 1px solid #e9ecef;
+            margin-bottom: 20px;
+        }
+
+        .bitcoin-icon {
+            width: 50px;
+            height: 50px;
+            background: #f7931a;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .header-info h1 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .header-info p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .refresh-btn {
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            background: #0056b3;
+            transform: rotate(180deg);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007AFF;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .price-cards {
+            display: grid;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .price-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .price-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .price-card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .currency-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+
+        .usd-icon {
+            background: #28a745;
+        }
+
+        .cny-icon {
+            background: #dc3545;
+        }
+
+        .price-title {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .price-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .price-change {
+            font-size: 14px;
+            padding: 4px 8px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .price-up {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .price-down {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .currency-selector {
+            display: flex;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 2px;
+        }
+
+        .currency-btn {
+            padding: 6px 12px;
+            border: none;
+            background: transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .currency-btn.active {
+            background: #007AFF;
+            color: white;
+        }
+
+        .chart-canvas {
+            width: 100%;
+            height: 200px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-line {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            background: linear-gradient(to right, #007AFF, #00D4AA);
+            clip-path: polygon(0% 100%, 0% 60%, 10% 55%, 20% 65%, 30% 50%, 40% 45%, 50% 40%, 60% 35%, 70% 30%, 80% 25%, 90% 20%, 100% 15%, 100% 100%);
+            opacity: 0.3;
+        }
+
+        .chart-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .last-update {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+
+        .features-list {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .features-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .feature-item:last-child {
+            border-bottom: none;
+        }
+
+        .feature-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            color: #28a745;
+        }
+
+        .demo-info {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .demo-title {
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 5px;
+        }
+
+        .demo-text {
+            font-size: 14px;
+            color: #424242;
+        }
+
+        @media (max-width: 480px) {
+            .phone-container {
+                margin: 10px;
+                border-radius: 20px;
+            }
+
+            .currency-btn {
+                min-height: 32px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-container">
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <span>9:41</span>
+            <span>📶 📶 📶 🔋</span>
+        </div>
+
+        <!-- Header -->
+        <div class="header">
+            <div style="display: flex; align-items: center;">
+                <div class="bitcoin-icon">₿</div>
+                <div class="header-info" style="margin-left: 15px;">
+                    <h1>BTC价格追踪</h1>
+                    <p>实时比特币价格监控</p>
+                </div>
+            </div>
+            <button class="refresh-btn" onclick="refreshPrices()">🔄</button>
+        </div>
+
+        <!-- Loading State -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>正在获取最新价格...</p>
+        </div>
+
+        <!-- Demo Info -->
+        <div class="demo-info">
+            <div class="demo-title">📱 iOS应用网页演示版</div>
+            <div class="demo-text">这是BTC价格追踪iOS应用的网页演示版本，展示了应用的核心功能和界面设计。</div>
+        </div>
+
+        <!-- Price Cards -->
+        <div class="price-cards" id="priceCards">
+            <div class="price-card">
+                <div class="price-card-header">
+                    <div class="currency-icon usd-icon">$</div>
+                    <span class="price-title">美元价格</span>
+                </div>
+                <div class="price-value" id="usdPrice">$113,785.00</div>
+                <div class="price-change price-up" id="usdChange">+1.25% (+$1,389)</div>
+            </div>
+
+            <div class="price-card">
+                <div class="price-card-header">
+                    <div class="currency-icon cny-icon">¥</div>
+                    <span class="price-title">人民币价格</span>
+                </div>
+                <div class="price-value" id="cnyPrice">¥810,321.00</div>
+                <div class="price-change price-up" id="cnyChange">+0.98% (+¥7,856)</div>
+            </div>
+        </div>
+
+        <!-- Chart Container -->
+        <div class="chart-container">
+            <div class="chart-header">
+                <div class="chart-title">价格走势图</div>
+                <div class="currency-selector">
+                    <button class="currency-btn active" onclick="switchCurrency('USD')">USD</button>
+                    <button class="currency-btn" onclick="switchCurrency('CNY')">CNY</button>
+                </div>
+            </div>
+            
+            <div class="chart-canvas">
+                <div class="chart-line"></div>
+            </div>
+
+            <div class="chart-stats">
+                <div class="stat-item">
+                    <div class="stat-label">最高价</div>
+                    <div class="stat-value" id="highPrice">$116,995</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">最低价</div>
+                    <div class="stat-value" id="lowPrice">$106,107</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">平均价</div>
+                    <div class="stat-value" id="avgPrice">$112,031</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Features List -->
+        <div class="features-list">
+            <div class="features-title">✨ 核心功能特性</div>
+            
+            <div class="feature-item">
+                <span class="feature-icon">✅</span>
+                <span>实时BTC价格查询 (30秒自动更新)</span>
+            </div>
+            
+            <div class="feature-item">
+                <span class="feature-icon">✅</span>
+                <span>USD和CNY双币种显示</span>
+            </div>
+            
+            <div class="feature-item">
+                <span class="feature-icon">✅</span>
+                <span>动态价格曲线图</span>
+            </div>
+            
+            <div class="feature-item">
+                <span class="feature-icon">✅</span>
+                <span>价格统计和趋势分析</span>
+            </div>
+            
+            <div class="feature-item">
+                <span class="feature-icon">✅</span>
+                <span>自动和手动刷新</span>
+            </div>
+            
+            <div class="feature-item">
+                <span class="feature-icon">✅</span>
+                <span>错误处理和状态管理</span>
+            </div>
+            
+            <div class="feature-item">
+                <span class="feature-icon">✅</span>
+                <span>响应式界面设计</span>
+            </div>
+            
+            <div class="feature-item">
+                <span class="feature-icon">✅</span>
+                <span>内存优化和性能保障</span>
+            </div>
+        </div>
+
+        <!-- Last Update -->
+        <div class="last-update" id="lastUpdate">
+            最后更新: 21:42:05
+        </div>
+    </div>
+
+    <script>
+        let currentCurrency = 'USD';
+        let isLoading = false;
+        
+        // 模拟价格数据
+        const priceData = {
+            USD: {
+                current: 113785,
+                change: 1389,
+                changePercent: 1.25,
+                high: 116995,
+                low: 106107,
+                avg: 112031
+            },
+            CNY: {
+                current: 810321,
+                change: 7856,
+                changePercent: 0.98,
+                high: 837334,
+                low: 750612,
+                avg: 791722
+            }
+        };
+
+        // 格式化价格显示
+        function formatPrice(price, currency) {
+            if (currency === 'USD') {
+                return '$' + price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            } else {
+                return '¥' + price.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+        }
+
+        // 格式化变化显示
+        function formatChange(change, changePercent, currency) {
+            const sign = change >= 0 ? '+' : '';
+            const symbol = currency === 'USD' ? '$' : '¥';
+            return `${sign}${changePercent.toFixed(2)}% (${sign}${symbol}${Math.abs(change).toLocaleString()})`;
+        }
+
+        // 刷新价格数据
+        function refreshPrices() {
+            if (isLoading) return;
+            
+            isLoading = true;
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('priceCards').style.opacity = '0.5';
+            
+            // 模拟API请求延迟
+            setTimeout(() => {
+                // 模拟价格波动
+                const usdVariation = (Math.random() - 0.5) * 0.04; // ±2%
+                const cnyVariation = (Math.random() - 0.5) * 0.04;
+                
+                priceData.USD.current = Math.round(113785 * (1 + usdVariation));
+                priceData.CNY.current = Math.round(810321 * (1 + cnyVariation));
+                
+                // 更新变化数据
+                priceData.USD.change = Math.round((Math.random() - 0.5) * 3000);
+                priceData.USD.changePercent = (priceData.USD.change / priceData.USD.current) * 100;
+                
+                priceData.CNY.change = Math.round((Math.random() - 0.5) * 20000);
+                priceData.CNY.changePercent = (priceData.CNY.change / priceData.CNY.current) * 100;
+                
+                updatePriceDisplay();
+                updateLastUpdateTime();
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('priceCards').style.opacity = '1';
+                isLoading = false;
+                
+                // 显示成功提示
+                showNotification('价格更新成功！', 'success');
+            }, 1500);
+        }
+
+        // 更新价格显示
+        function updatePriceDisplay() {
+            const usd = priceData.USD;
+            const cny = priceData.CNY;
+            
+            document.getElementById('usdPrice').textContent = formatPrice(usd.current, 'USD');
+            document.getElementById('cnyPrice').textContent = formatPrice(cny.current, 'CNY');
+            
+            const usdChangeEl = document.getElementById('usdChange');
+            const cnyChangeEl = document.getElementById('cnyChange');
+            
+            usdChangeEl.textContent = formatChange(usd.change, usd.changePercent, 'USD');
+            cnyChangeEl.textContent = formatChange(cny.change, cny.changePercent, 'CNY');
+            
+            // 更新颜色
+            usdChangeEl.className = 'price-change ' + (usd.change >= 0 ? 'price-up' : 'price-down');
+            cnyChangeEl.className = 'price-change ' + (cny.change >= 0 ? 'price-up' : 'price-down');
+            
+            updateChartStats();
+        }
+
+        // 切换货币
+        function switchCurrency(currency) {
+            currentCurrency = currency;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.currency-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            updateChartStats();
+            
+            // 显示切换提示
+            showNotification(`已切换到${currency}视图`, 'info');
+        }
+
+        // 更新图表统计
+        function updateChartStats() {
+            const data = priceData[currentCurrency];
+            
+            document.getElementById('highPrice').textContent = formatPrice(data.high, currentCurrency);
+            document.getElementById('lowPrice').textContent = formatPrice(data.low, currentCurrency);
+            document.getElementById('avgPrice').textContent = formatPrice(data.avg, currentCurrency);
+        }
+
+        // 更新最后更新时间
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('zh-CN', {hour12: false});
+            document.getElementById('lastUpdate').textContent = `最后更新: ${timeString}`;
+        }
+
+        // 显示通知
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007AFF'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                font-size: 14px;
+                z-index: 1000;
+                animation: slideIn 0.3s ease;
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 2000);
+        }
+
+        // 添加动画样式
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // 自动更新价格 (每30秒)
+        setInterval(() => {
+            if (!isLoading) {
+                refreshPrices();
+            }
+        }, 30000);
+
+        // 初始化
+        updatePriceDisplay();
+        updateLastUpdateTime();
+        
+        // 显示欢迎消息
+        setTimeout(() => {
+            showNotification('欢迎使用BTC价格追踪应用！', 'info');
+        }, 1000);
+    </script>
+</body>
+</html>
