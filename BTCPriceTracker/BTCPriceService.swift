@@ -39,7 +39,7 @@ class BTCPriceService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private var cancellables = Set<AnyCancellable>()
+    private var priceRequest: AnyCancellable?
     private var timer: Timer?
     
     private let baseURL = "https://api.coingecko.com/api/v3/simple/price"
@@ -80,6 +80,8 @@ class BTCPriceService: ObservableObject {
      * 同时获取USD和CNY价格
      */
     func fetchCurrentPrice() {
+        // Coalesce timer and manual refreshes while a request is in flight.
+        guard !isLoading else { return }
         guard let url = URL(string: "\(baseURL)?ids=bitcoin&vs_currencies=usd,cny") else {
             self.errorMessage = "Invalid URL"
             return
@@ -88,27 +90,37 @@ class BTCPriceService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        URLSession.shared.dataTaskPublisher(for: url)
-            .map { $0.data }
+        priceRequest = URLSession.shared.dataTaskPublisher(for: url)
+            .tryMap { output in
+                guard let response = output.response as? HTTPURLResponse,
+                      (200..<300).contains(response.statusCode) else {
+                    throw URLError(.badServerResponse)
+                }
+                return output.data
+            }
             .decode(type: CoinGeckoResponse.self, decoder: JSONDecoder())
+            .tryMap { response in
+                let price = response.bitcoin
+                guard price.usd.isFinite, price.cny.isFinite,
+                      price.usd > 0, price.cny > 0 else {
+                    throw URLError(.cannotParseResponse)
+                }
+                return BTCPrice(usdPrice: price.usd, cnyPrice: price.cny)
+            }
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
+                    self?.priceRequest = nil
                     self?.isLoading = false
                     if case .failure(let error) = completion {
                         self?.errorMessage = "Failed to fetch price: \(error.localizedDescription)"
                     }
                 },
-                receiveValue: { [weak self] response in
-                    let newPrice = BTCPrice(
-                        usdPrice: response.bitcoin.usd,
-                        cnyPrice: response.bitcoin.cny
-                    )
+                receiveValue: { [weak self] newPrice in
                     self?.currentPrice = newPrice
                     self?.addToHistory(newPrice)
                 }
             )
-            .store(in: &cancellables)
     }
     
     /**

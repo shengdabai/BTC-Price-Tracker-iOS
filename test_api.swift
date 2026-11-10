@@ -115,3 +115,4 @@ if apiSuccess {
 } else {
     print("\n⚠️  请检查网络连接或API服务状态")
 }
+exit(apiSuccess ? 0 : 1)
