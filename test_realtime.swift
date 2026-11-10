@@ -215,11 +215,14 @@ animationManager.startRefreshAnimation()
 priceService.refreshPrice()
 
 // 等待手动刷新完成
-let semaphore = DispatchSemaphore(value: 0)
-DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-    semaphore.signal()
+let refreshDeadline = Date().addingTimeInterval(2)
+while priceService.isLoading && Date() < refreshDeadline {
+    RunLoop.current.run(until: Date().addingTimeInterval(0.01))
 }
-semaphore.wait()
+guard !priceService.isLoading else {
+    print("❌ 手动刷新超时")
+    exit(1)
+}
 
 print("\n📈 手动刷新后状态:")
 if let currentPrice = priceService.currentPrice {

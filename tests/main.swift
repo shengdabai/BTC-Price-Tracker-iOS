@@ -5,19 +5,47 @@ import Foundation
 final class FixtureProtocol: URLProtocol {
     static let lock = NSLock()
     static var requests = 0
+    static var statusCode = 200
+    static var body = #"{"bitcoin":{"usd":60000,"cny":420000}}"#
+    static var delay: TimeInterval = 0
+    static var transportError: URLError?
+    private var pending: DispatchWorkItem?
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.lock.lock()
         Self.requests += 1
+        let status = Self.statusCode
+        let data = Data(Self.body.utf8)
+        let delay = Self.delay
+        let error = Self.transportError
         Self.lock.unlock()
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200,
-                                       httpVersion: nil, headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(#"{"bitcoin":{"usd":60000,"cny":420000}}"#.utf8))
-        client?.urlProtocolDidFinishLoading(self)
+        let delivery = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            if let error = error {
+                self.client?.urlProtocol(self, didFailWithError: error)
+                return
+            }
+            let response = HTTPURLResponse(url: self.request.url!, statusCode: status,
+                                           httpVersion: nil, headerFields: nil)!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: data)
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+        pending = delivery
+        DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: delivery)
     }
-    override func stopLoading() {}
+    override func stopLoading() { pending?.cancel() }
+    static func fixture(status: Int = 200,
+                        body: String = #"{"bitcoin":{"usd":60000,"cny":420000}}"#,
+                        delay: TimeInterval = 0, error: URLError? = nil) {
+        lock.lock()
+        defer { lock.unlock() }
+        statusCode = status
+        Self.body = body
+        Self.delay = delay
+        transportError = error
+    }
     static var requestCount: Int {
         lock.lock()
         defer { lock.unlock() }
@@ -55,6 +83,63 @@ service?.stopPriceUpdates()
 service?.startPriceUpdates()
 check(waitFor { FixtureProtocol.requestCount > before && service?.isLoading == false },
       "stopped updates can restart")
+service?.stopPriceUpdates()
+
+for status in [401, 429, 500] {
+    FixtureProtocol.fixture(status: status)
+    let historyCount = service!.priceHistory.count
+    let previousID = service!.currentPrice!.id
+    service?.refreshPrice()
+    check(waitFor { service?.isLoading == false }, "HTTP \(status) finishes loading")
+    check(service?.errorMessage != nil && service?.currentPrice?.id == previousID
+          && service?.priceHistory.count == historyCount,
+          "HTTP \(status) rejects even a valid price body and preserves last price")
+}
+
+for body in [
+    #"{"bitcoin":{"usd":-1,"cny":420000}}"#,
+    #"{"bitcoin":{"usd":60000,"cny":0}}"#,
+    #"{"bitcoin":{"usd":"60000","cny":420000}}"#,
+    #"{"bitcoin":{"usd":1e400,"cny":420000}}"#,
+    #"{"bitcoin":{"usd":60000}}"#,
+    "not JSON", ""
+] {
+    FixtureProtocol.fixture(body: body)
+    let historyCount = service!.priceHistory.count
+    let previousID = service!.currentPrice!.id
+    service?.refreshPrice()
+    check(waitFor { service?.isLoading == false }, "invalid price finishes loading")
+    check(service?.errorMessage != nil && service?.currentPrice?.id == previousID
+          && service?.priceHistory.count == historyCount,
+          "invalid price rejects and preserves last price: \(body)")
+}
+
+FixtureProtocol.fixture(error: URLError(.notConnectedToInternet))
+let previousID = service!.currentPrice!.id
+service?.refreshPrice()
+check(waitFor { service?.isLoading == false }, "transport failure finishes loading")
+check(service?.errorMessage != nil && service?.currentPrice?.id == previousID,
+      "transport failure preserves last price")
+
+FixtureProtocol.fixture(delay: 0.1)
+let historyCount = service!.priceHistory.count
+let requestCount = FixtureProtocol.requestCount
+service?.refreshPrice()
+for _ in 0..<10 { service?.refreshPrice() }
+check(waitFor { service?.isLoading == false }, "delayed refresh completes")
+check(FixtureProtocol.requestCount == requestCount + 1
+      && service?.priceHistory.count == historyCount + 1,
+      "overlapping refreshes share one request and one history point")
+check(service?.errorMessage == nil, "successful refresh clears previous error")
+
+FixtureProtocol.fixture()
+for _ in 0..<105 {
+    service?.refreshPrice()
+    check(waitFor { service?.isLoading == false }, "sequential refresh completes")
+}
+check(service?.priceHistory.count == 100, "history stays bounded after repeated requests")
+service?.startPriceUpdates()
+check(waitFor { service?.isLoading == false }, "final active timer request finishes")
 weak var releasedService = service
 service = nil
 check(releasedService == nil, "active timer does not retain the service")

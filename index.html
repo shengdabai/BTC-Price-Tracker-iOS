@@ -573,13 +573,13 @@
 
         // 切换货币
         function switchCurrency(currency) {
+            if (currency !== 'USD' && currency !== 'CNY') return;
             currentCurrency = currency;
             
             // 更新按钮状态
             document.querySelectorAll('.currency-btn').forEach(btn => {
-                btn.classList.remove('active');
+                btn.classList.toggle('active', btn.textContent === currency);
             });
-            event.target.classList.add('active');
             
             updateChartStats();
             
